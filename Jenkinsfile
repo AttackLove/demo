@@ -10,7 +10,7 @@ stages {
 				echo 'Pulling...' + env.BRANCH_NAME
                 def mvnHome = tool 'Maven 3.3.9'
 				if (isUnix()) {
-					def targetVersion = v1.0-test
+					def targetVersion = 'v1.0-test'
 					print 'target build version...'
 					print targetVersion
 					sh "'${mvnHome}/bin/mvn' -Dintegration-tests.skip=true -Dbuild.number=${targetVersion} clean package"
