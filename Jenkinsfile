@@ -15,10 +15,10 @@ stages {
 					print targetVersion
 					sh "'${mvnHome}/bin/mvn' -Dintegration-tests.skip=true -Dbuild.number=${targetVersion} clean package"
 					//sh "mvn -Dintegration-tests.skip=true -Dbuild.number=${targetVersion} clean package"
-					def pom = readMavenPom file: 'pom.xml'
+					//def pom = readMavenPom file: 'pom.xml'
 					// get the current development version
-					developmentArtifactVersion = "${pom.version}-${targetVersion}"
-					print pom.version
+					//developmentArtifactVersion = "${pom.version}-${targetVersion}"
+					//print pom.version
 					// execute the unit testing and collect the reports
 					junit '**//*target/surefire-reports/TEST-*.xml'
 					archive 'target*//*.jar'
