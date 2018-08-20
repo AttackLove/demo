@@ -32,6 +32,20 @@ stages {
 			}
 		}
 	}
+	stage('Integration tests'){
+		steps {
+			script {
+                def mvnHome = tool 'Maven 3.3.9'
+				if (isUnix()) {
+					sh "'${mvnHome}/bin/mvn' verify -Dunit-tests.skip=true"
+					junit '**//*target/surefire-reports/TEST-*.xml'
+					archive 'target*//*.jar'
+				} else {
+					 bat(/"${mvnHome}\bin\mvn" verify -Dunit-tests.skip=true/)
+				}
+			}
+		}
+	}
 }
 
 }
