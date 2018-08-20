@@ -1,0 +1,46 @@
+#共同属性配置文件，此配置文件内容不能修改，本地修改不能提交
+#与运行环境相关，需要被覆盖的属性 测试在-test.yml,集成在-assembly.yml
+
+#server
+server:
+  port: 8888
+  #tomcat:
+   # accesslog:
+    #  enabled: true
+      #directory: d:/tomcat/log
+
+#mybatis  
+mybatis:
+   mapper-locations: classpath*:sqlmap/**/*Mapper.xml
+
+##H2数据库配置  
+#spring:  
+  #datasource:
+    #schema:
+    #- classpath*:db/schema.sql  #自动执行建表语句
+    #data:
+    #- classpath*:db/data.sql #执行插入语句
+    #driverClassName: org.h2.Driver
+    #url: jdbc:h2:mem:test 
+    #type: com.alibaba.druid.pool.DruidDataSource
+    #username: sa
+    #password:
+  #h2:
+    #console:
+      #enabled: true
+      #path: /h2-console
+      #settings:
+        #web-allow-others: true
+        #trace: true
+    
+
+#mysql配置
+spring:
+  application:
+    name: pms-service
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driverClassName: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/pms?allowMultiQueries=true&amp;autoReconnect=true
+    username: root
+    password: root

@@ -1,0 +1,1 @@
+INSERT INTO test_user (userid, username, age, createtime) VALUES ('0', 'system', '12', '2018-08-16 14:02:55');
