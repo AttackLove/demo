@@ -1,7 +1,7 @@
 pipeline {
 agent any
 environment {
-        EMAIL_RECIPIENTS = 'mahmoud.romeh@test.com'
+        EMAIL_RECIPIENTS = '358370398@qq.com'
     }
 stages {
 	stage('Build with unit testing'){
