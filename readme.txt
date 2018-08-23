@@ -11,3 +11,5 @@ mvn clean compile test surefire-report:report
 测试完成会生成 target/site/surefire-report.html 报告
 
 集成测试初始
+
+ mvn clean install pmd:pmd checkstyle:checkstyle findbugs:findbugs sonar:sonar

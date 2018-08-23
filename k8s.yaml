@@ -1,0 +1,47 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  labels:
+    app: $APP_NAME
+  name: $APP_NAME
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: $APP_NAME
+  template:
+    metadata:
+      labels:
+        app: $APP_NAME
+      annotations:
+        kubernetes.io/change-cause: $IMAGE_NAME
+    spec:
+      containers:
+      - image: $IMAGE_NAME
+        name: $APP_NAME
+#        resources:
+#          requests:
+#            memory: 1024Mi
+#            cpu: 500m
+#          limits:
+#            memory: 1024Mi
+#            cpu: 2000m
+        env:
+        - name: JAVA_OPTS
+          value: -Xms1024M -Xmx1024M
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: $APP_NAME
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: $APP_NAME
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: $NODE_PORT
+  type: NodePort

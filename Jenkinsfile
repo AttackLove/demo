@@ -1,51 +1,196 @@
 pipeline {
-agent any
-environment {
-        EMAIL_RECIPIENTS = '358370398@qq.com'
+    agent any // Require a build executor with docker
+    
+	// global env variables
+    environment {
+		
+		//k8s变量，k8s应用部署会使用
+        K8S_APP_NAME='demo'  //部署到k8s中定义的应用名称，需要修改
+		K8S_NODE_PORT='31028'  //k8s应用暴露给主机的端口，可通过此在集群外访问应用。需要修改，该端口需要提前申请
+		K8S_NAMESPACE='pipline-demo' //k8s应用命名空间，需要修改，需要提前申请
+		K8S_NODE_HOST='10.1.202.4' //k8s应用访问端点中的IP，一般不需要修改
+		//DOCKER变量，docker打包及部署会使用
+		DOCKER_HOST='tcp://10.1.202.102:2375' //镜像构建主机，一般不需要修改
+		DOKCER_BASE_IMAGE='10.1.202.102:8082/aspire-base/centos7-jdk8' //基础镜像简写，一般不需要修改
+		DOKCER_IMAGE='10.1.202.102:8082/test/demo' //应用镜像名称，需要修改,私有镜像仓库用户名test需提前申请，应用名称demo需修改为实际的
+		
     }
-stages {
-	stage('Build with unit testing'){
-		steps {
-			script {
-				echo 'Pulling...' + env.BRANCH_NAME
-                                def mvnHome = tool 'Maven 3.3.9'
-				if (isUnix()) {
-					def targetVersion = 'v1.0-test'
-					print 'target build version...'
-					print targetVersion
-					sh "'${mvnHome}/bin/mvn' -Dintegration-tests.skip=true -Dbuild.number=${targetVersion} clean package"
-					//sh "mvn -Dintegration-tests.skip=true -Dbuild.number=${targetVersion} clean package"
-					//def pom = readMavenPom file: 'pom.xml'
-					// get the current development version
-					//developmentArtifactVersion = "${pom.version}-${targetVersion}"
-					//print pom.version
-					// execute the unit testing and collect the reports
-					junit '**//*target/surefire-reports/TEST-*.xml'
-					archive 'target*//*.jar'
-				} else {
-					bat(/"${mvnHome}\bin\mvn" -Dintegration-tests.skip=true clean package/)
-					def pom = readMavenPom file: 'pom.xml'
-					print pom.version
-					junit '**//*target/surefire-reports/TEST-*.xml'
-					archive 'target*//*.jar'
-				}
+    // The options directive is for configuration that applies to the whole job.
+    options {
+        // For example, we'd like to make sure we only keep 10 builds at a time, so
+        // we don't fill up our storage!
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+         // And we'd really like to be sure that this build doesn't hang forever, so
+        // let's time it out after an hour.
+        timeout(time: 25, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                createPipelineTriggers()
+                createVersion()
+
+                sh "mvn clean package -Dunit-tests.skip=true -Drevision=${versionName}"
+                archiveArtifacts '**/target/*.*ar'
+            }
+        }
+		
+		stage('Unit Test') {
+			steps {
+				sh "mvn test -Drevision=${versionName}"
 			}
 		}
-	}
-	stage('Integration tests'){
-		steps {
-			script {
-                def mvnHome = tool 'Maven 3.3.9'
-				if (isUnix()) {
-					sh "'${mvnHome}/bin/mvn' verify -Dunit-tests.skip=true"
-					junit '**//*target/surefire-reports/TEST-*.xml'
-					archive 'target*//*.jar'
-				} else {
-					 bat(/"${mvnHome}\bin\mvn" verify -Dunit-tests.skip=true/)
-				}
+		
+		stage('Integration Test') {
+            // when { expression { return isNightly() } }
+			steps {
+				sh "mvn verify -Dunit-tests.skip=true -Drevision=${versionName}"
 			}
 		}
-	}
+
+        stage('Statical Code Analysis') {
+            steps {
+                analyzeWithSonarQubeAndWaitForQualityGoal()
+            }
+        }
+        
+        stage('Install') {
+        	when { expression { return currentBuild.currentResult == 'SUCCESS' } }
+            steps {
+					sh "mvn install -Drevision=${versionName} -Ddocker.host=${DOCKER_HOST} -Ddocker.base.image=${DOKCER_BASE_IMAGE} -Ddocker.image=${DOKCER_IMAGE} -Dunit-tests.skip=true -Dintegration-tests.skip=true" 
+            }
+        }
+		
+		stage('Deploy') {
+            when { expression { return currentBuild.currentResult == 'SUCCESS' } }
+
+            steps {
+                script {
+                	 deployToKubernetes(versionName, 'kubeconfig-staging-it')
+                }
+            }
+        }
+    }
+	post {
+		// Always runs. And it runs before any of the other post conditions.
+        always {
+            // Archive Unit and integration test results, if any
+            junit (allowEmptyResults: true,testResults: '**/target/surefire-reports/TEST-*.xml, **/target/failsafe-reports/*.xml')
+            writeFile(file:'devops.html',text:'<html><body><h2><p style="text-align:center" title="point to yg devops"><Strong><a href="http://10.1.202.102">yg devops entrypoint</a></p></h2></body></html>')
+            archiveArtifacts '*.html'
+            // Let's wipe out the workspace before we finish!
+            //deleteDir()
+        }
+	    /* unstable {
+	        sendEmail("Unstable");
+	     }
+	     failure {
+	        sendEmail("Failed");
+	     }*/
+        
+    }
+
+   
 }
 
+void createPipelineTriggers() {
+    script {
+        def triggers = []
+        if (env.BRANCH_NAME == 'master') {
+            // Run a nightly only for master
+            triggers = [cron('H H(0-3) * * 1-5')]
+        }
+        properties([
+                pipelineTriggers(triggers)
+        ])
+    }
+}
+
+String createVersion() {
+    // E.g. "201708140933"
+    String versionName = "${new Date().format('yyyyMMddHHmm')}"
+
+    if (env.BRANCH_NAME != "master") {
+        versionName += '-SNAPSHOT'
+    }
+    echo "Building version ${versionName} on branch ${env.BRANCH_NAME}"
+    currentBuild.description = versionName
+    env.versionName = versionName
+}
+
+boolean  isNightly(){
+	return Calendar.instance.get(Calendar.HOUR_OF_DAY) in 0..3
+}
+
+void deployToKubernetes(String versionName, String credentialsId) {
+	/*String dockerRegistry = 'us.gcr.io/ces-demo-instances'
+    String imageName = "${dockerRegistry}/kitchensink:${versionName}"
+
+    docker.withRegistry("https://${dockerRegistry}", 'docker-us.gcr.io/ces-demo-instances') {
+        docker.build(imageName, '.').push()
+    }*/
+	
+	String imageName ="${DOKCER_IMAGE}:${versionName}"
+	
+	withEnv(["IMAGE_NAME=${imageName}","APP_NAME=${K8S_APP_NAME}","NODE_PORT=${K8S_NODE_PORT}","NAMESPACE=${K8S_NAMESPACE}"]) {
+
+            kubernetesDeploy(
+                    kubeconfigId: credentialsId,
+                    configs: 'k8s.yaml',
+                    enableConfigSubstitution: true
+            )
+    }
+	
+    timeout(time: 5, unit: 'MINUTES') {
+        waitUntil {
+            sleep(time: 10, unit: 'SECONDS')
+            isVersionDeployed(versionName, "http://${K8S_NODE_HOST}:${K8S_NODE_PORT}/version")
+        }
+    }
+	
+}
+
+boolean isVersionDeployed(String expectedVersion, String versionEndpoint) {
+	def status = sh(returnStatus:true, script: "curl -s ${versionEndpoint}")
+	if(status !=0) return false;
+    def deployedVersion = sh(returnStdout: true, script: "curl -s ${versionEndpoint}").trim()
+    echo "Deployed version returned by ${versionEndpoint}: ${deployedVersion}. Waiting for ${expectedVersion}."
+    return expectedVersion == deployedVersion
+}
+
+void analyzeWithSonarQubeAndWaitForQualityGoal() {
+    withSonarQubeEnv('sonarcloud.io') {
+	    sh 'mvn -Drevision=${versionName} pmd:pmd checkstyle:checkstyle findbugs:findbugs sonar:sonar'
+    }
+    timeout(time: 1, unit: 'MINUTES') { // Normally, this takes only some ms. sonarcloud.io might take minutes, though :-(
+        def qg = waitForQualityGate()
+        if (qg.status != 'OK') {
+            echo "Pipeline unstable due to quality gate failure: ${qg.status}"
+            currentBuild.result = 'UNSTABLE'
+        }	
+    }
+}
+
+String getServiceIp(String kubeconfigCredential) {
+
+    withCredentials([file(credentialsId: kubeconfigCredential, variable: 'kubeconfig')]) {
+
+        String serviceName = 'kitchensink' // See k8s/service.yaml
+
+        // Using kubectl is so much easier than plain REST via curl (parsing info from kubeconfig is cumbersome!)
+        return sh(returnStdout: true, script:
+                "docker run -v ${kubeconfig}:/root/.kube/config lachlanevenson/k8s-kubectl:v1.9.5" +
+                        " get svc ${serviceName}" +
+                        ' |  awk \'{print $4}\'  | sed -n 2p'
+                ).trim()
+    }
+}
+
+void sendEmail(status) {
+    mail(
+            to: "$EMAIL_RECIPIENTS",
+            subject: "Build $BUILD_NUMBER - " + status + " (${currentBuild.fullDisplayName})",
+            body: "Changes:\n " + getChangeString() + "\n\n Check console output at: $BUILD_URL/console" + "\n")
 }
