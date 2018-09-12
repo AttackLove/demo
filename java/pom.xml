@@ -302,7 +302,7 @@
 					</images>
 				</configuration>
 				
-				<executions>
+				<!--<executions>
 			    <execution>
 			       <phase>install</phase>
 			       <goals>
@@ -310,7 +310,7 @@
 			         <goal>push</goal>
 			       </goals>
 			    </execution>
-			    </executions>
+			    </executions>-->
 			</plugin>
 
 		</plugins>

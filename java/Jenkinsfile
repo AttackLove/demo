@@ -11,6 +11,7 @@ pipeline {
     environment {
 		//k8s变量，k8s应用部署会使用
         K8S_APP_NAME='demo'  //部署到k8s中定义的应用名称，需要修改
+        K8S_APP_VERSION_URL='version' //k8s判断是否部署成功url，如果应用需要.do 或者多级iodd/version 等可以修改
 		K8S_NODE_PORT='31028'  //k8s应用暴露给主机的端口，可通过此在集群外访问应用。需要修改，该端口需要提前申请
 		K8S_NAMESPACE='pipline-demo' //k8s应用命名空间，需要修改，需要提前申请
 		K8S_NODE_HOST='10.1.202.4' //k8s应用访问端点中的IP，一般不需要修改
@@ -39,7 +40,7 @@ pipeline {
             steps {
                 createPipelineTriggers()
                 createVersion()
-                sh "mvn ${MVN_OPTS} clean package   -Dunit-tests.skip=true -Drevision=${versionName}"
+                sh "mvn ${MVN_OPTS} clean install   -Dunit-tests.skip=true -Drevision=${versionName}"
                 archiveArtifacts '**/target/*.*ar'
             }
         }
@@ -66,7 +67,7 @@ pipeline {
         stage('Install') {
         	when { expression { return currentBuild.currentResult == 'SUCCESS' } }
             steps {
-					sh "mvn ${MVN_OPTS} install -Drevision=${versionName} -Ddocker.host=${DOCKER_HOST} -Ddocker.base.image=${DOKCER_BASE_IMAGE} -Ddocker.image=${DOKCER_IMAGE} -Dunit-tests.skip=true -Dintegration-tests.skip=true" 
+					sh "mvn ${MVN_OPTS} docker:build docker:push -Drevision=${versionName} -Ddocker.host=${DOCKER_HOST} -Ddocker.base.image=${DOKCER_BASE_IMAGE} -Ddocker.image=${DOKCER_IMAGE} -Dunit-tests.skip=true -Dintegration-tests.skip=true" 
             }
         }
 		
@@ -153,7 +154,7 @@ void deployToKubernetes(String versionName, String credentialsId) {
     timeout(time: 5, unit: 'MINUTES') {
         waitUntil {
             sleep(time: 10, unit: 'SECONDS')
-            isVersionDeployed(versionName, "http://${K8S_NODE_HOST}:${K8S_NODE_PORT}/version")
+            isVersionDeployed(versionName, "http://${K8S_NODE_HOST}:${K8S_NODE_PORT}/${K8S_APP_VERSION_URL}")
         }
     }
 	
