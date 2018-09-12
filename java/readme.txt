@@ -1,5 +1,3 @@
-demo项目包含java工程和vue工程
-
 
 集成测试命名
 mvn clean compile verify -Dunit-tests.skip=true  surefire-report:report

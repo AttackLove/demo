@@ -103,6 +103,17 @@
                 <!-- Filter for version name in properties -->
                 <directory>src/main/resources</directory>
                 <filtering>true</filtering>
+                <includes>
+                    <include>app.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <!-- Filter for version name in properties -->
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>app.properties</exclude>
+                </excludes>
             </resource>
         </resources>
 		<pluginManagement>
@@ -178,6 +189,7 @@
 					<excludes>
 						<include>**/*UT.java</include>
 					</excludes>
+					<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
 				</configuration>
 			</plugin>
 			<!-- code coverage -->
